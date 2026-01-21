@@ -1,6 +1,6 @@
 # ==============================================================================
 # 01_Solve_Background.jl
-# Solves the background dynamics and visualizes both inputs (V) and outputs (phi)
+# Solves the background dynamics for Starobinsky and T-Model potentials
 # ==============================================================================
 
 using DifferentialEquations
