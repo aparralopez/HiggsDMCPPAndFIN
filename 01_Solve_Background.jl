@@ -227,6 +227,7 @@ dϕ(t) = sol(t)[2]
 N(t) = sol(t)[3]
 
 R(t) = 8*pi/MP^2*(4*V_S(ϕ(t)) - dϕ(t)^2)
+H(t) = sqrt(4*pi/(3*MP^2)*(dϕ(t))^2 + 2*V_S(ϕ(t)))
 
 times = sol.t
 
@@ -322,6 +323,8 @@ dϕ_η(η) = dϕ(t_of_eta(η))
 
 R_η(η) = 8*pi/MP^2*(4*V_S(ϕ_η(η)) - dϕ_η(η)^2)
 
+a_η(η) = a(t_of_eta(η))
+
 p_ϕ_η = plot(η.(η_sol.t), ϕ_η.(η.(η_sol.t)),
     xlims=(-1,η_f),ylims=(-1e5,0.7*1e6),   
     label=false, xlabel=L"\eta", ylabel=L"\phi(\eta)", lw=2, title="Inflaton vs Conformal Time")
@@ -330,7 +333,11 @@ p_R_η = plot(η.(η_sol.t), R_η.(η.(η_sol.t)),
     xlims=(-1,η_f), ylims=(-2,22),
     label=false, xlabel=L"\eta", ylabel=L"R(\eta)", lw=2, title="Ricci Scalar vs Conformal Time")
 
-final_η_plot = plot(p_ϕ_η, p_R_η, layout=(2,1), size=(800, 800))
+p_a_η = plot(η.(η_sol.t), a_η.(η.(η_sol.t)),
+    xlims=(-1,η_f), ylims=(-10,200),
+    label=false, xlabel=L"\eta", ylabel=L"a(\eta)", lw=2, title="Scale Factor vs Conformal Time")
+
+final_η_plot = plot(p_ϕ_η, p_R_η, p_a_η, layout=(3,1), size=(800, 1200))
 
 display(final_η_plot)
 
