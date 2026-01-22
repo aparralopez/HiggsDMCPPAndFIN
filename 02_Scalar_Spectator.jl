@@ -88,7 +88,7 @@ display(p_d2ω)
 
 ## Now we define the system of ODEs to solve for each mode
 
-function mode_equations!(dχ, χ, η, params)
+function mode_equations!(dχ, χ, params, η)
     k, m, ξ = params
     ω_val = ω(η, k, m, ξ)
 
@@ -237,4 +237,6 @@ function solve_mode(k, m, ξ)
     return sol_re, sol_im
 end
 
-solve_mode(1.0, 1.0, 1.0)
+sol=solve_mode(1.0, 1.0, 1.0)
+
+sol[]
