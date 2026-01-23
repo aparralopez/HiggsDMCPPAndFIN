@@ -175,8 +175,8 @@ display(final_plot)
 # Plot Hubble Evolution
 # We need to calculate H again for plotting since it's not saved in 'sol'
 
-H_S(t) = sqrt(4*pi/(3*MP^2)*(dϕ_S(t)).^2 .+ 2*V_S.(ϕ_S(t)))
-H_T(t) = sqrt(4*pi/(3*MP^2)*(dϕ_T(t)).^2 .+ 2*V_T.(ϕ_T(t))) 
+H_S(t) = sqrt(4*pi/(3*MP^2)*(dϕ_S(t).^2 .+ 2*V_S.(ϕ_S(t))))
+H_T(t) = sqrt(4*pi/(3*MP^2)*(dϕ_T(t).^2 .+ 2*V_T.(ϕ_T(t)))) 
 
 dH_S(t) = -4*pi/MP^2 * dϕ_S(t)^2
 dH_T(t) = -4*pi/MP^2 * dϕ_T(t)^2
@@ -227,7 +227,7 @@ dϕ(t) = sol(t)[2]
 N(t) = sol(t)[3]
 
 R(t) = 8*pi/MP^2*(4*V_S(ϕ(t)) - dϕ(t)^2)
-H(t) = sqrt(4*pi/(3*MP^2)*(dϕ(t))^2 + 2*V_S(ϕ(t)))
+H(t) = sqrt(4*pi/(3*MP^2)*(dϕ(t)^2 + 2*V_S(ϕ(t))))
 
 times = sol.t
 
