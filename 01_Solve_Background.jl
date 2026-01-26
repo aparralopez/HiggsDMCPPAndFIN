@@ -105,7 +105,7 @@ end
 #η_i = 0.0
 
 t_i = BigFloat(-100 * 10^5) / rMP
-t_f =  BigFloat(100 * 10^5) / rMP
+t_f =  BigFloat(100 * 10^7) / rMP
 ϕ_i  = BigFloat(1.0877) * MP
 dϕ_i = BigFloat(0.0)
 

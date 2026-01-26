@@ -14,18 +14,28 @@ using Base.Threads # To check if threading is on
 using ArbNumerics # For evaluating Hankels with complex orders natively
 #using Conda
 
-# 1. SETUP & INCLUDES # --------------------------------------------------------------------------
+setprecision(BigFloat, 256)
 
 include("00_Physics.jl")
-include("01_Solve_Background.jl")
+#include("01_Solve_Background.jl")
+include("01b_Solve_Background_Modular.jl")
 
 #a(η) = a_η(η)
 #R(η) = R_η(η)
 
+sol_S = solve_background(V_S, dV_S)
+
+η_i = sol_S.η_i
+η_f = sol_S.η_f
+
+a_η = sol_S.a
+R_η = sol_S.R
+H_η = sol_S.H
+
 println("Background solved. Creating fast interpolation tables...")
 
 # 1. Create a dense grid in Float64
-η_grid_fast = Float64.(range(η_SR, η_f, length=10000))
+η_grid_fast = Float64.(range(η_i, η_f, length=10000))
 
 # 2. Pre-calculate a and R, converting to Float64 immediately
 a_vals = Float64.(real.(a_η.(η_grid_fast)))
@@ -191,7 +201,7 @@ function τ(η, k, m, ξ)
 end
 
 function v_SR(η, k, m, ξ)
-    μ = sqrt((m^2 + ξ*R(t_i))/H(t_i)^2 - 2 +0im)
+    μ = sqrt((m^2 + ξ*R_η(η_i))/H_η(η_i)^2 - 2 +0im)
     nu = sqrt(1/4 - μ^2 + 0im)
     A = sqrt(pi/(2*k)*exp(1im*pi*(nu+1/2)))
     return sqrt(-k*τ(η, k, m, ξ)) * A * hankelh1_an(nu,-k*τ(η, k, m, ξ))
