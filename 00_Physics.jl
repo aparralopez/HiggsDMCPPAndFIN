@@ -7,7 +7,8 @@ using LaTeXStrings
 
 # --- 1. UNITS & PARAMETERS --- (from 2303.07359v2)
 
-const rMP = 2.435e18 / 1.0e13 # Reduced Planck Mass in units of 10^13 GeV
+#const rMP = 2.435e18 / 1.0e13 # Reduced Planck Mass in units of 10^13 GeV
+const rMP = 2.435e18 / 1.2e13 # Reduced Planck Mass in units of the quadratic inflaton mass (1.2*10^13 GeV)
 #const rMP = 2.435e18         # Reduced Planck Mass in GeV          
 const MP  = rMP * √(8π)       # Full Planck Mass
 const ne  = 55.0              # e-folds
@@ -15,7 +16,8 @@ const ne  = 55.0              # e-folds
 # Couplings
 
 const λS = 2.5e-7 / ne^2
-const λT = 6.2e-8 / ne^2      # Tanh potential coupling
+const λT = 6.2e-8 / ne^2 # Tanh potential coupling
+const m_Q = 1.21e13 / 1.21e13 # Quadratic inflaton mass in units of itself     
 
 # --- 2. POTENTIAL DEFINITIONS ---
 
@@ -45,4 +47,14 @@ end
 function dV_T(ϕ)
     arg = ϕ / (√6 * rMP)
     return 2 * √6 * λT * rMP^3 * sinh(arg) / (cosh(arg)^3)
+end
+
+# Quadractic Potential (VQ)
+
+function V_Q(ϕ)
+    return 1/2 * m_Q^2 * ϕ^2
+end
+
+function dV_Q(ϕ)
+    return m_Q^2 * ϕ
 end

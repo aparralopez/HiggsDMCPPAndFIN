@@ -114,7 +114,7 @@ N_i = BigFloat(0.0)
 u0 = [ϕ_i, dϕ_i, N_i]
 tspan = (t_i, t_f)
 
-# Solve
+# Starobinsky
 
 println("2. Solving Starobinsky Dynamics...")
 
@@ -142,6 +142,21 @@ sol_T = solve(prob_T, Rodas5P(), reltol=1e-8, abstol=1e-8)
 
 println("   -> Solution found.")
 
+# Quadratic
+
+println("2. Solving Quadratic Dynamics...")
+
+ϕ_Q(t) = sol_Q(t)[1]
+dϕ_Q(t) = sol_Q(t)[2]
+
+p_Q = (V_Q, dV_Q)
+
+prob_Q = ODEProblem(inflation_system!, u0, tspan, p_Q)
+sol_Q = solve(prob_Q, Rodas5P(), reltol=1e-8, abstol=1e-8)
+
+println("   -> Solution found.")
+
+
 
 # 4. OUTPUT CHECK: PLOT THE SOLUTIONS # ------------------------------------------------------------------------------
 
@@ -154,37 +169,50 @@ p1 = plot(sol_S.t, ϕ_S.(sol_S.t),
     label="Starobinsky", xlabel=L"t", ylabel=L"\phi(t)", lw=2)
     plot!(sol_T.t, ϕ_T.(sol_T.t), 
     label="T-Model", ls=:dash, lw=2) # Add T-Model to same plot
+    plot!(sol_Q.t, ϕ_Q.(sol_Q.t), 
+    label="Quadratic", ls=:dot, lw=2) # Add Quadratic to same plot
 
 p2 = plot(sol_S.t, dϕ_S.(sol_S.t), 
     label="Starobinsky", xlabel=L"t", ylabel=L"\phi^{\prime}(t)", lw=2)
     plot!(sol_T.t, dϕ_T.(sol_T.t), 
     label="T-Model", ls=:dash, lw=2) # Add T-Model to same plot
+    plot!(sol_Q.t, dϕ_Q.(sol_Q.t), 
+    label="Quadratic", ls=:dot, lw=2) # Add Quadratic to same plot
+
 
 # Plot Ricci Scalar Evolution
 
 R_S(t) = 8*pi/MP^2*(4*V_S(ϕ_S(t)) - dϕ_S(t)^2)
 R_T(t) = 8*pi/MP^2*(4*V_T(ϕ_T(t)) - dϕ_T(t)^2)
+R_Q(t) = 8*pi/MP^2*(4*V_Q(ϕ_Q(t)) - dϕ_Q(t)^2)
+
 p3 = plot(sol_S.t, R_S, 
     label="Starobinsky", xlabel=L"t", ylabel=L"R(t)", lw=2)
     plot!(sol_T.t, R_T,
     label="T-Model", ls=:dash, lw=2)
+    plot!(sol_Q.t, R_Q,
+    label="Quadratic", ls=:dot, lw=2)
 
-final_plot = plot(p1, p2, layout=(2,1), size=(800, 800))
+final_plot = plot(p1, p2, p3, layout=(3,1), size=(800, 800))
 display(final_plot)
 
 # Plot Hubble Evolution
 # We need to calculate H again for plotting since it's not saved in 'sol'
 
 H_S(t) = sqrt(4*pi/(3*MP^2)*(dϕ_S(t).^2 .+ 2*V_S.(ϕ_S(t))))
-H_T(t) = sqrt(4*pi/(3*MP^2)*(dϕ_T(t).^2 .+ 2*V_T.(ϕ_T(t)))) 
+H_T(t) = sqrt(4*pi/(3*MP^2)*(dϕ_T(t).^2 .+ 2*V_T.(ϕ_T(t))))
+H_Q(t) = sqrt(4*pi/(3*MP^2)*(dϕ_Q(t).^2 .+ 2*V_Q.(ϕ_Q(t))))
 
 dH_S(t) = -4*pi/MP^2 * dϕ_S(t)^2
 dH_T(t) = -4*pi/MP^2 * dϕ_T(t)^2
+dH_Q(t) = -4*pi/MP^2 * dϕ_Q(t)^2
 
 p4 = plot(sol_S.t, H_S.(sol_S.t), 
     label="Starobinsky", ylabel=L"H(t)", title="Expansion History", lw=2)
-plot!(sol_T.t, H_T.(sol_T.t), 
+    plot!(sol_T.t, H_T.(sol_T.t), 
     label="T-Model", ls=:dash, lw=2)
+    plot!(sol_Q.t, H_Q.(sol_Q.t), 
+    label="Quadratic", ls=:dot, lw=2)
 
 final_plot = plot(p3, p4, layout=(2,1), size=(800, 800))
 display(final_plot)
@@ -201,13 +229,18 @@ println("Generating Slow-Roll Parameter Plots...")
 
 ϵ_T(t) = -dH_T(t) / H_T(t)^2
 
+# 1st Slow-Roll Parameter for Quadratic
+
+ϵ_Q(t) = -dH_Q(t) / H_Q(t)^2
+
 # Plot Slow-Roll Parameters
 
 p = plot(sol_S.t, ϵ_S.(sol_S.t), 
     label="Starobinsky ϵ", ylabel="Slow-Roll Parameters", title="Slow-Roll Parameters", lw=2)
-plot!(sol_T.t, ϵ_T.(sol_T.t),
+    plot!(sol_T.t, ϵ_T.(sol_T.t),
     label="T-Model ϵ", ls=:dash, lw=2)
-
+    plot!(sol_Q.t, ϵ_Q.(sol_Q.t),
+    label="Quadratic ϵ", ls=:dot, lw=2)
 final_sr_plot = plot(p, size=(800, 400))
 
 display(final_sr_plot)

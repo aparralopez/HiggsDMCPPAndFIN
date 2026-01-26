@@ -22,7 +22,20 @@ include("01_Solve_Background.jl")
 #a(η) = a_η(η)
 #R(η) = R_η(η)
 
-println("Background solved. Starting Scalar Spectator Field Production...")
+println("Background solved. Creating fast interpolation tables...")
+
+# 1. Create a dense grid in Float64
+η_grid_fast = Float64.(range(η_SR, η_f, length=10000))
+
+# 2. Pre-calculate a and R, converting to Float64 immediately
+a_vals = Float64.(real.(a_η.(η_grid_fast)))
+R_vals = Float64.(real.(R_η.(η_grid_fast)))
+
+# 3. Create fast interpolators
+const a_fast = LinearInterpolation(η_grid_fast, a_vals, extrapolation_bc=Flat())
+const R_fast = LinearInterpolation(η_grid_fast, R_vals, extrapolation_bc=Flat())
+
+println("Starting Scalar Spectator Field Production...")
 
 #const mp = pyimport("mpmath")
 #mp.dps = 50  # set decimal places
@@ -34,7 +47,7 @@ println("Background solved. Starting Scalar Spectator Field Production...")
 
 # Let us define a Hankel frunction from ArbNumerics
 
-setprecision(ArbFloat,256)
+setprecision(ArbFloat,64)
 
 function hankelh1_an(nu,z)
     nu_an = ArbComplex(nu)
@@ -100,8 +113,21 @@ ForwardDiff.derivative(z -> hankelh1_an(-1im, z), -1)
 
 ## We first define the mode frequency
 
+# Define a FAST frequency for the solver (no broadcasting, pure Float64)
+
+function ω_fast(η, k, m, ξ)
+    # Use the lookup table
+    a = a_fast(η)
+    R = R_fast(η)
+    return sqrt(k^2 + a^2 * (m^2 + (ξ - 0.16666666666666666) * R) + 0im)
+end
+
+#function ω(η, k, m, ξ)
+#    return sqrt(k.^2 .+ a_η.(η).^2 .* (m.^2 + (ξ - 1/6) * R_η.(η)) + 0im) # The frequency can become imaginary!
+#end
+
 function ω(η, k, m, ξ)
-    return sqrt(k.^2 .+ a_η.(η).^2 .* (m.^2 + (ξ - 1/6) * R_η.(η)))
+    return sqrt(k^2 + a_η(η)^2 * (m^2 + (ξ - 1/6) * R_η(η)) + 0im) # The frequency can become imaginary!
 end
 
 dω(η, k, m, ξ) = ForwardDiff.derivative(η -> ω(η, k, m, ξ), η)
@@ -120,7 +146,7 @@ m_sample = 1.0
 η_vals = range(-0.2, η_f, length=1000)
 ω_vals = ω.(η_vals,k_sample,m_sample,ξ_sample)
 
-p_ω = plot(η_vals, ω_vals,
+p_ω = plot(η_vals, real.(ω_vals),
     label=false, xlabel=L"\eta", ylabel=L"\omega(\eta)", lw=2, title="Mode Frequency vs Conformal Time")
 
 display(p_ω)
@@ -129,14 +155,14 @@ display(p_ω)
 
 dω_vals = dω.(η_vals, k_sample, m_sample, ξ_sample)
 
-p_dω = plot(η_vals, dω_vals,
+p_dω = plot(η_vals, real.(dω_vals),
     label=false, xlabel=L"\eta", ylabel=L"\omega'(\eta)", lw=2, title="Mode Frequency Derivative vs Conformal Time")
 
 display(p_dω)
 
 d2ω_vals = d2ω.(η_vals, k_sample, m_sample, ξ_sample)
 
-p_d2ω = plot(η_vals, d2ω_vals,
+p_d2ω = plot(η_vals, real.(d2ω_vals),
     label=false, xlabel=L"\eta", ylabel=L"\omega''(\eta)", lw=2, title="Mode Frequency 2nd Derivative vs Conformal Time")
 
 display(p_d2ω)
@@ -145,7 +171,7 @@ display(p_d2ω)
 
 function mode_equations!(dχ, χ, params, η)
     k, m, ξ = params
-    ω_val = ω(η, k, m, ξ)
+    ω_val = ω_fast(η, k, m, ξ)
 
     dχ[1] = χ[2]
     dχ[2] = -ω_val^2* χ[1]
@@ -153,7 +179,7 @@ end
 
 # 3. Solve with approximate SR initial conditions # ----------------------------------------------------------------
 
-η_SR = -100
+η_SR = -500
 
 function ω_dS(η, k, m, ξ)
     μ2=(m^2 + ξ*R(t_i))/H(t_i)^2 - 2
@@ -171,19 +197,9 @@ function v_SR(η, k, m, ξ)
     return sqrt(-k*τ(η, k, m, ξ)) * A * hankelh1_an(nu,-k*τ(η, k, m, ξ))
 end
 
-ω(-1,1,1,1)/ω_dS(-1,1,1,1)
-
-hankelh1_an(-2im,100)
-
-τ(η_SR,1,1,1)
-
-v_SR(η_SR,1,1,1)
-
 # Let us compute the derivative of the modes
 
 dv_SR(η, k, m, ξ) = ForwardDiff.derivative(η -> v_SR(η, k, m, ξ), η)
-
-dv_SR(η_SR,1,1,1)
 
 # Let us compute the wronskian to check the normalization
 
@@ -197,35 +213,32 @@ wronskian_SR(η_SR,1,1,1)
 
 wronskian_SR(-1,100,1,1)
 
-# Something's wrong here... the wronskian is not constant (and not 2pi * i). The derivative of the Hankel is working, so maybe I defined something wrong in the mode.
+wronskian_SR(η_SR,1,1e-4,1)
 
-################
+## Let us now solve the mode equations with these initial conditions
 
-# Let us now solve the mode equations with these initial conditions
-function solve_mode(k, m, ξ)
-    # Initial conditions from SR vacuum
+function solve_mode(k, m, ξ ;kwargs...)
+
     v0 = v_SR(η_SR, k, m, ξ)
     dv0 = dv_SR(η_SR, k, m, ξ)
 
-    χ0 = [v0, dv0]
+    χ0 = ComplexF64[ComplexF64(v0), ComplexF64(dv0)]
 
-    params = (k, m, ξ)
-    η_span = (η_SR, η_f)
+    params = (Float64(k), Float64(m), Float64(ξ))
+    η_span = (Float64(η_SR), Float64(η_f))
 
-    println("Solving mode k=$k, m=$m, ξ=$ξ from η=$η_SR to η=$η_f")
-    println("  -> Initial conditions: v0=$(v0), dv0=$(dv0)")
+    #println("Solving mode k=$k, m=$m, ξ=$ξ from η=$η_SR to η=$η_f")
+    #println("  -> Initial conditions: v0=$(v0), dv0=$(dv0)")
 
     prob = ODEProblem(mode_equations!, χ0, η_span, params)
 
-    sol = solve(prob, Tsit5(), reltol=1e-9, abstol=1e-9)
-
-    #v = sol_re[end][1] + im * sol_im[end][1]
-    #dv = sol_re[end][2] + im * sol_im[end][2]
+    #sol = solve(prob, Rodas5P(autodiff=false), reltol=1e-10, abstol=1e-10, maxiters=1e7; kwargs...)
+    sol = solve(prob, Tsit5(), reltol=1e-10, abstol=1e-10, maxiters=1e7; kwargs...)
 
     return sol
 end
 
-mode_test=solve_mode(1.0, 1.0, 1.0)
+mode_test=solve_mode(1e-4, 0.5, 1.0)
 
 mode_test.t
 v_test = mode_test[1,:]
@@ -239,141 +252,112 @@ wronskian.(v_test, dv_test)
 
 # This is perfect!
 
-#######
+# 4. We obtain now the Bogoliubov coefficients # ----------------------------------------------------
 
-function compute_beta_k(k, m, ξ)
-    # 1. Run the solver
-    # We pass save_everystep=false because we only need the final value
-    # This prevents storing thousands of points in RAM
-    params = (k, m, ξ)
-    η_span = (η_SR, η_f)
-    
-    # Re-using your logic (assuming v_SR/dv_SR are defined globally or passed)
-    v0 = v_SR(η_SR, k, m, ξ)
-    dv0 = dv_SR(η_SR, k, m, ξ)
-    χ0 = [v0, dv0]
+## We first define the adiabatic modes
 
-    prob = ODEProblem(mode_equations!, χ0, η_span, params)
-    
-    # SOLVE: Note save_everystep=false!
-    sol = solve(prob, Tsit5(), reltol=1e-9, abstol=1e-9, save_everystep=false)
+function u_ad(η, k, m, ξ)
 
-    # 2. Extract Final State (at η_f)
-    v_final = sol[1, end]
-    dv_final = sol[2, end]
+    u = 1/sqrt(ω(η, k, m, ξ))
 
-    # 3. Compute Beta Squared
-    # Define your frequency omega at the final time
-    # (assuming standard Minkowski-like vacuum at end)
-    ω_f = sqrt(k^2 + m^2) # Or whatever your effective mass is at η_f
-    
-    # Standard Bogoliubov formula (check your specific normalization!)
-    # β = (2ω)^{-1/2} * (i v' + ω v) * phase...
-    # |β|^2 = (1/4ω^2) * |v' - iω v|^2 
-    # (Note: Formula depends on your Wronskian normalization)
-    
-    beta_sq = (1 / (4 * ω_f)) * abs2(dv_final - im * ω_f * v_final)
-
-    return beta_sq
+    return u
 end
 
-using Base.Threads
+function du_ad(η, k, m, ξ)
 
-function scan_k_modes(k_array, m, ξ)
-    # Pre-allocate result array
-    # Use Float64 to save space, unless you really need BigFloat for the output
-    results = zeros(Float64, length(k_array)) 
+    du = -1/sqrt(ω(η, k, m, ξ))*(1im*ω(η, k, m, ξ) + dω(η, k, m, ξ)/(2*ω(η, k, m, ξ)))
 
-    println("Starting scan on $(nthreads()) threads...")
-
-    # The threaded loop
-    @threads for i in 1:length(k_array)
-        k = k_array[i]
-        
-        # Compute and store
-        # converting result to Float64 for storage if desired
-        results[i] = Float64(compute_beta_k(k, m, ξ))
-    end
-
-    return results
+    return du
 end
 
-# 1. Define your range of k (e.g., logarithmic)
-k_values = 10 .^ range(-2, 2, length=100)
-
-# 2. Run the scan
-spectrum = scan_k_modes(k_values, 1.0, 4.0)
-
-# 3. Plot
-using Plots
-plot(k_values, spectrum, xscale=:log10, yscale=:log10, 
-     ylabel="|β_k|²", xlabel="k", title="Particle Production")
-
-########
-
-function solve_mode(k, m, ξ; kwargs...) 
-    # ... (Your existing setup code: v0, dv0, params, etc.) ...
+function bog_coeff(k, m, ξ)
     
-    # Initial conditions
-    v0 = v_SR(η_SR, k, m, ξ)
-    dv0 = dv_SR(η_SR, k, m, ξ)
-    χ0 = [v0, dv0]
-    
-    params = (k, m, ξ)
-    η_span = (η_SR, η_f)
-
-    # Note: Removed the print statements so the parallel loop doesn't spam your console
-    prob = ODEProblem(mode_equations!, χ0, η_span, params)
-
-    # Pass kwargs... into solve. 
-    # This allows the caller to control save_everystep, tolerances, etc.
-    sol = solve(prob, Tsit5(), reltol=1e-9, abstol=1e-9; kwargs...)
-
-    return sol
-end
-
-function compute_beta_sq(k, m, ξ)
-    # 1. Call your solver
-    # We pass save_everystep=false to optimize speed/RAM
     sol = solve_mode(k, m, ξ; save_everystep=false)
 
-    # 2. Extract Final State
-    # sol[end] gives the vector [v, dv] at the final time step
-    v_f  = sol[1, end] 
+    v_f = sol[1, end]
     dv_f = sol[2, end]
 
-    # 3. Define frequency at final time (Minkowski / Adiabatic vacuum assumption)
-    # Ensure this matches your specific model's late-time dispersion relation
-    ω_f = sqrt(k^2 + m^2) 
+    alpha = ( u_ad(η_f, k, m, ξ)*conj(dv_f) - du_ad(η_f, k, m, ξ)*conj(v_f) ) / (2im)
 
-    # 4. Bogoliubov Coefficient Calculation
-    # |β|^2 = (1/4ω^2) * |v' - iωv|^2
-    # This checks how much "negative frequency" exists in the mode
-    term = dv_f - (im * ω_f * v_f)
-    beta_sq = (1.0 / (4 * ω_f^2)) * abs2(term) # 4*w^2 or 4*w? check normalization
+    beta = ( u_ad(η_f, k, m, ξ)*dv_f - du_ad(η_f, k, m, ξ)*v_f ) / (2im)
 
-    # Note: Standard normalization is usually 1/(2w) for quantization, 
-    # leading to the prefactor 1/(4w^2) here. Double check your derivation!
-    
-    return beta_sq
+    return (alpha, beta)
+
 end
 
-using Base.Threads
+bog_coeff(1,1,1)[2]
 
-function get_spectrum(k_array, m, ξ)
-    # Pre-allocate output array
-    n_k = length(k_array)
-    beta_squared = zeros(Float64, n_k)
+function beta2(k, m, ξ)
+    
+    beta = bog_coeff(k, m, ξ)[2]
 
-    println("Scanning $n_k modes on $(nthreads()) threads...")
+    return beta*conj(beta)
 
-    @threads for i in 1:n_k
-        k = k_array[i]
-        
-        # Call the physics function
-        # converting to Float64 to save space (optional)
-        beta_squared[i] = Float64(compute_beta_sq(k, m, ξ))
+end
+
+beta2(1,1e-3,1)
+
+## Let us try to plot a spectrum
+
+a_f = Float64(a_η(η_f))
+
+k_list = 10 .^ range(-4, 5, length=120)/a_f
+
+function k2beta2(m, ξ)
+
+    Sk = zeros(Float64, length(k_list))
+
+    @threads for i in 1:length(k_list)
+
+    #println("i = $i")
+
+    Sk[i] = k_list[i]^2*beta2(k_list[i], m, ξ)
+
     end
 
-    return beta_squared
+    return Sk
+
 end
+
+Sk_test_1 = k2beta2(1e-4,1/6)
+
+p_Sk_1 = plot(k_list, Sk_test_1,
+    scale=:log10,
+    label=false, xlabel=L"k", ylabel=L"k^2|\beta_k^2|", lw=2, title="Produced particle spectrum")
+
+Sk_test_2 = k2beta2(1e-3,1/6)
+
+p_Sk_2 = plot!(k_list, Sk_test_2,
+    scale=:log10,
+    label=false, xlabel=L"k", ylabel=L"k^2|\beta_k^2|", lw=2, title="Produced particle spectrum")
+
+Sk_test_3 = k2beta2(1e-2,1/6)
+p_Sk_3 = plot!(k_list, Sk_test_3,
+    scale=:log10,
+    label=false, xlabel=L"k", ylabel=L"k^2|\beta_k^2|", lw=2, title="Produced particle spectrum")
+
+beta2(1000,1e-3,1)
+
+
+
+Sk_test_1 = k2beta2(1e-4,0.51)
+
+p_Sk_1 = plot(k_list, Sk_test_1,
+    scale=:log10,
+    label=false, xlabel=L"k", ylabel=L"k^2|\beta_k^2|", lw=2, title="Produced particle spectrum")
+
+Sk_test_2 = k2beta2(1e-3,0.51)
+
+p_Sk_2 = plot!(k_list, Sk_test_2,
+    scale=:log10,
+    label=false, xlabel=L"k", ylabel=L"k^2|\beta_k^2|", lw=2, title="Produced particle spectrum")
+
+Sk_test_3 = k2beta2(1e-2,0.51)
+p_Sk_3 = plot!(k_list, Sk_test_3,
+    scale=:log10,
+    label=false, xlabel=L"k", ylabel=L"k^2|\beta_k^2|", lw=2, title="Produced particle spectrum")
+
+Sk_test_4 = k2beta2(1e-1,0.51)
+p_Sk_4 = plot!(k_list, Sk_test_4,
+    scale=:log10,
+    label=false, xlabel=L"k", ylabel=L"k^2|\beta_k^2|", lw=2, title="Produced particle spectrum")
